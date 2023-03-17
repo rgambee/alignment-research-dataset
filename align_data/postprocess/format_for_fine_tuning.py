@@ -4,7 +4,7 @@ import collections
 import itertools
 import logging
 import pathlib
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, MutableMapping, Optional, Sequence
 
 import jsonlines
 
@@ -71,11 +71,66 @@ COMPLETION_TEMPLATE = """
 
 """
 
+# Template for formatting forum comments, like those from LessWrong.
+COMMENT_TEMPLATE = """
+{authors}
+
+{text}
+
+{comments}
+"""
+
+# Templates for particular fields, like dictionaries with fields of their own.
+FIELD_TEMPLATES = {
+    "comments": COMMENT_TEMPLATE,
+}
+
+
+def preformat_entry(
+    entry: MutableMapping[str, Any],
+    templates: MutableMapping[str, str] = FIELD_TEMPLATES,
+) -> None:
+    """Format fields according to their own templates
+
+    This function modifies the input mapping in-place.
+
+    As an example, consider this input entry:
+        {
+            "title": "A Proposal",
+            "comments": [
+                {
+                    "author": "Foo Bar",
+                    "text": "Nice idea!"
+                }
+            ]
+        }
+
+    With the appropriate templates, the `comments` field could be reformatted
+    as follows:
+        {
+            "title": "A Proposal",
+            "comments": "Foo Bar\n\nNice idea!"
+        }
+    """
+    for key, value in entry.items():
+        if key in templates:
+            if isinstance(value, collections.abc.MutableMapping):
+                entry[key] = format_entry(entry, templates[key])
+            elif isinstance(value, collections.abc.MutableSequence) and not isinstance(
+                value, str
+            ):
+                for i, elem in enumerate(value):
+                    # TODO: What about lists of lists or lists of ints?
+                    if isinstance(elem, collections.abc.MutableMapping):
+                        value[i] = format_entry(elem, templates[key])
+                entry[key] = "\n\n\n".join(value)
+
 
 def format_entry(entry: Mapping[str, Any], template: str) -> str:
     """Format an entry according to the given template"""
     # Fill in missing values with the empty string
     entry_with_default = collections.defaultdict(str, entry)
+    preformat_entry(entry_with_default)
     return template.format_map(entry_with_default)
 
 
