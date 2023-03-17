@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+import argparse
+import collections
+import itertools
+import logging
+import pathlib
+from typing import Any, Mapping, Optional, Sequence
+
+import jsonlines
+
+
+DESCRIPTION = """Reformat a dataset to make it suitable for fine tuning
+
+According to the OpenAI API documentation, fine tuning data must be in the form
+of a JSONL file where each line look like this:
+
+    {"prompt": "Knock, knock", "completion: "Who's there?"}
+
+For more information, see
+https://platform.openai.com/docs/guides/fine-tuning/prepare-training-data
+
+This script takes a JSONL dataset and transforms it to match the above format.
+The contents of the prompt and completion are determined by templates within
+this script. It uses Python's `str.format()` method to populate the template
+with the contents of each entry. Read more about the syntax here:
+https://docs.python.org/3/library/string.html#formatstrings
+
+The template should use the keys in the original dataset. If a key is not
+present in an entry, the empty string will be inserted instead.
+"""
+
+EPILOG = r"""EXAMPLES:
+
+# Minimal example to format original dataset for fine tuning
+python format_for_fine_tuning.py -i alignment_texts.jsonl -o fine-tuning.jsonl
+
+# Only include entries from "lesswong" and "alignment forum"
+python format_for_fine_tuning.py -i alignment_texts.jsonl -o fine-tuning.jsonl \
+    --sources lesswrong "alignment forum"
+
+# Or if the original dataset is already split by source, you can specify which
+# files to use as input
+python format_for_fine_tuning.py -i arxiv.jsonl lesswrong.jsonl -o fine-tuning.jsonl
+"""
+
+# Template for formatting the prompt.
+# OpenAI recommends the prompt end with a stop sequence (e.g. "\n\n###\n\n") to divide
+# it from the completion.
+PROMPT_TEMPLATE = """
+{title}
+
+by {authors}
+
+{tags}
+
+{text}
+
+Comments
+
+===
+
+"""
+
+# Template for formatting the completion.
+# OpenAI recommends the completion start with a whitespace character and end
+# with a stop sequence (e.g. "###").
+COMPLETION_TEMPLATE = """
+{comments}
+
+===
+
+"""
+
+
+def format_entry(entry: Mapping[str, Any], template: str) -> str:
+    """Format an entry according to the given template"""
+    # Fill in missing values with the empty string
+    entry_with_default = collections.defaultdict(str, entry)
+    return template.format_map(entry_with_default)
+
+
+def format_prompt(entry: dict[str, Any]) -> str:
+    return format_entry(entry, PROMPT_TEMPLATE)
+
+
+def format_completion(entry: dict[str, Any]) -> str:
+    return format_entry(entry, COMPLETION_TEMPLATE)
+
+
+def prepare_fine_tuning_entries(
+    input_paths: Sequence[pathlib.Path],
+    output_path: pathlib.Path,
+    sources: Optional[Sequence[str]] = None,
+) -> None:
+    lines_read = 0
+    lines_written = 0
+    with jsonlines.open(output_path, "w", compact=True) as writer:
+        for i, input_path in enumerate(input_paths):
+            input_parse_errors = 0
+            logging.info(
+                f"Processing input file {i + 1}/{len(input_paths)}: {input_path}"
+            )
+            with open(input_path) as input_file:
+                reader = jsonlines.Reader(input_file)
+                for line_number in itertools.count(1):
+                    try:
+                        input_entry = reader.read(type=dict, skip_empty=True)
+                    except EOFError:
+                        # Reached end of file, continue to the next one
+                        break
+                    except jsonlines.InvalidLineError as err:
+                        logging.debug(f"Skipping line {line_number} due to {err!r}")
+                        input_parse_errors += 1
+                    else:
+                        lines_read += 1
+                        if (
+                            sources is not None
+                            and input_entry.get("source") not in sources
+                        ):
+                            # Skip this entry because it's source
+                            # isn't one we want to include
+                            continue
+
+                        try:
+                            output_entry = {
+                                "prompt": format_prompt(input_entry),
+                                "completion": format_completion(input_entry),
+                            }
+                        except (AttributeError, KeyError) as err:
+                            logging.debug(f"Skipping line {line_number} due to {err!r}")
+                        else:
+                            writer.write(output_entry)
+                            lines_written += 1
+
+            if input_parse_errors > 0:
+                logging.warning(f"Skipped {input_parse_errors} malformed lines")
+
+    logging.info(f"Processed {lines_read} lines, wrote {lines_written} lines")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=DESCRIPTION,
+        epilog=EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        required=True,
+        nargs="+",
+        type=pathlib.Path,
+        help="Path(s) to JSONL dataset(s) to reformat for fine tuning",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        type=pathlib.Path,
+        help="Path to file where JSONL fine tuning data will be saved",
+    )
+    parser.add_argument(
+        "-s",
+        "--sources",
+        nargs="+",
+        help="""Filter entries from input dataset to only include these sources.
+        By default, include all sources.""",
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Assume a reply of 'yes' for all prompts",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Output extra info to help with debugging.",
+    )
+    args = parser.parse_args()
+
+    logging_level = logging.INFO
+    if args.verbose:
+        logging_level = logging.DEBUG
+    logging.basicConfig(format="%(levelname)s - %(message)s", level=logging_level)
+
+    if args.output.exists() and not args.yes:
+        logging.warning(f"Output file '{args.output}' exists.")
+        reply = ""
+        while reply not in ("y", "yes", "n", "no"):
+            reply = input("Overwrite? (y/n): ").lower()
+        if reply not in ("y", "yes"):
+            logging.info("Exiting")
+            return
+
+    prepare_fine_tuning_entries(
+        input_paths=args.input,
+        output_path=args.output,
+        sources=args.sources,
+    )
+
+
+if __name__ == "__main__":
+    main()
