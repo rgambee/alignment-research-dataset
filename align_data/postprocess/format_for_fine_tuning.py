@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import collections
+import functools
 import itertools
 import logging
 import pathlib
-from typing import Any, Mapping, MutableMapping, Optional, Sequence
+from typing import Any, Callable, Mapping, MutableMapping, Optional, Sequence, Union
 
 import jsonlines
 
@@ -80,15 +81,27 @@ COMMENT_TEMPLATE = """
 {comments}
 """
 
-# Templates for particular fields, like dictionaries with fields of their own.
-FIELD_TEMPLATES = {
+
+# The FIELD_FORMATTERS dictionary defines custom formatters for specific fields in a
+# larger data entry. These are applied before the prompt and completion are created.
+# They offer more control over how individual fields, like the main text, are formatted
+# in the final output.
+
+# Each formatter is matched to the corresponding field using its key. A formatter can be
+# a string, in which case it will be interpreted as a template and applied using
+# format_entry(). Or a formatter can be a callable that takes the field value and
+# returns a string.
+FIELD_FORMATTERS: Mapping[str, Union[str, Callable[[str], str]]] = {
+    # Format the comment field according to the template above
     "comments": COMMENT_TEMPLATE,
+    # Limit the text field to a length of 3000 characters (not tokens)
+    "text": lambda text: text[:3000],
 }
 
 
-def preformat_entry(
+def format_fields(
     entry: MutableMapping[str, Any],
-    templates: MutableMapping[str, str] = FIELD_TEMPLATES,
+    formatters: Mapping[str, Union[str, Callable[[Any], str]]] = FIELD_FORMATTERS,
 ) -> None:
     """Format fields according to their own templates
 
@@ -113,32 +126,40 @@ def preformat_entry(
         }
     """
     for key, value in entry.items():
-        if key in templates:
-            if isinstance(value, collections.abc.MutableMapping):
-                entry[key] = format_entry(entry, templates[key])
-            elif isinstance(value, collections.abc.MutableSequence) and not isinstance(
-                value, str
-            ):
-                for i, elem in enumerate(value):
-                    # TODO: What about lists of lists or lists of ints?
-                    if isinstance(elem, collections.abc.MutableMapping):
-                        value[i] = format_entry(elem, templates[key])
-                entry[key] = "\n\n\n".join(value)
+        if key not in formatters:
+            continue
+        format_this_field: Callable[[Any], str]
+        if callable(formatters[key]):
+            format_this_field = formatters[key]  # type: ignore[assignment]
+        else:
+            format_this_field = functools.partial(
+                format_entry, template=formatters[key]
+            )
+        if isinstance(value, collections.abc.MutableSequence) and not isinstance(
+            value, str
+        ):
+            for i, elem in enumerate(value):
+                # TODO: What about lists of lists or lists of ints?
+                if isinstance(elem, collections.abc.MutableMapping):
+                    value[i] = format_this_field(elem)
+            entry[key] = "\n\n\n".join(value)
+        else:
+            entry[key] = format_this_field(value)
 
 
 def format_entry(entry: Mapping[str, Any], template: str) -> str:
     """Format an entry according to the given template"""
     # Fill in missing values with the empty string
     entry_with_default = collections.defaultdict(str, entry)
-    preformat_entry(entry_with_default)
+    format_fields(entry_with_default)
     return template.format_map(entry_with_default)
 
 
-def format_prompt(entry: dict[str, Any]) -> str:
+def format_prompt(entry: Mapping[str, Any]) -> str:
     return format_entry(entry, PROMPT_TEMPLATE)
 
 
-def format_completion(entry: dict[str, Any]) -> str:
+def format_completion(entry: Mapping[str, Any]) -> str:
     return format_entry(entry, COMPLETION_TEMPLATE)
 
 
