@@ -73,7 +73,7 @@ def main(command : str , out_path : str = "data" , dataset_name : str = None ) -
     :return: A list of strings.
     """
 
-    assert command in [ "list" , "fetch" , "fetch-all" ] , f"Invalid command: {command}"
+    assert command in [ "list" , "fetch" , "fetch-all", "count-tokens" ] , f"Invalid command: {command}"
 
     al_dataset = AlignmentDataset(out_path)
 
@@ -84,7 +84,7 @@ def main(command : str , out_path : str = "data" , dataset_name : str = None ) -
     elif command == "fetch-all":
         return al_dataset.cmd_fetch_all()
     elif command == "count-tokens":
-        al_dataset.cmd_count_tokens()
+        al_dataset.cmd_count_tokens(dataset_name)
         return None
 
 if __name__ == "__main__":
