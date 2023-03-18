@@ -77,8 +77,6 @@ COMMENT_TEMPLATE = """
 {authors}
 
 {text}
-
-{comments}
 """
 
 
