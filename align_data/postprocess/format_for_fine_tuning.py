@@ -90,6 +90,8 @@ Karma: {score}
 FIELD_FORMATTERS: Mapping[str, Union[str, Callable[[str], str]]] = {
     # Format the comment field according to the template above
     "comments": COMMENT_TEMPLATE,
+    # Replace minus sign (Unicode code point U+2212) with plain ASCII hyphen (U+002D)
+    "score": lambda s: s.replace("−", "-"),
 }
 
 
