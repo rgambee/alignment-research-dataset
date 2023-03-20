@@ -194,22 +194,31 @@ def prepare_fine_tuning_entries(
                             # Skip this entry because it's source
                             # isn't one we want to include
                             continue
-
-                        try:
-                            output_entry = {
-                                "prompt": format_prompt(input_entry),
-                                "completion": format_completion(input_entry),
-                            }
-                        except (AttributeError, KeyError) as err:
-                            logging.debug(f"Skipping line {line_number} due to {err!r}")
-                        else:
-                            writer.write(output_entry)
-                            lines_written += 1
+                        lines_written += write_entry(input_entry, writer)
 
             if input_parse_errors > 0:
                 logging.warning(f"Skipped {input_parse_errors} malformed lines")
 
     logging.info(f"Processed {lines_read} lines, wrote {lines_written} lines")
+
+
+def write_entry(input_entry: Mapping[str, Any], writer: jsonlines.Writer) -> int:
+    lines_written = 0
+    # Make a separate output entry for each top-level comment
+    for comment_index, comment in enumerate(input_entry.get("comments", [])):
+        try:
+            entry_with_one_comment = dict(input_entry)
+            entry_with_one_comment["comments"] = [comment]
+            output_entry = {
+                "prompt": format_prompt(entry_with_one_comment),
+                "completion": format_completion(entry_with_one_comment),
+            }
+        except (AttributeError, KeyError, ValueError) as err:
+            logging.debug(f"Skipping comment {comment_index} due to {err!r}")
+        else:
+            writer.write(output_entry)
+            lines_written += 1
+    return lines_written
 
 
 def main() -> None:
