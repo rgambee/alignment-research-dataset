@@ -10,10 +10,11 @@ def count_token(merged_dataset_path : str = "data/merged_dataset/alignment_texts
 
     with jsonlines.open(merged_dataset_path) as reader:
         for obj in reader:
-            encoding = tokenizer(obj["text"])
-            total_token_count += len(encoding.tokens())
-            total_word_count += len(obj["text"].split())
-            total_character_count += len(obj["text"])
+            for value in obj.values():
+                encoding = tokenizer(value)
+                total_token_count += len(encoding.tokens())
+                total_word_count += len(value.split())
+                total_character_count += len(value)
 
     logger.info(f"Total token count: {total_token_count}")
     logger.info(f"Total word count: {total_word_count}")
