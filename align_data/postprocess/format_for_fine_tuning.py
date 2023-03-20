@@ -197,6 +197,12 @@ def prepare_fine_tuning_entries(
                         if int(input_entry.get("score", "0").replace("−", "-")) <= 0:
                             # Skip posts with low karma
                             continue
+                        if len(input_entry.get("title", "")) < 5:
+                            # Skip posts with very short titles, like "."
+                            logging.debug(
+                                f"Skipping post with title {input_entry.get('title')!r}"
+                            )
+                            continue
                         lines_written += write_entry(input_entry, writer)
 
             if input_parse_errors > 0:
