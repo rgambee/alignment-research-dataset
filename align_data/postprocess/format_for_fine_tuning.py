@@ -194,6 +194,9 @@ def prepare_fine_tuning_entries(
                             # Skip this entry because it's source
                             # isn't one we want to include
                             continue
+                        if int(input_entry.get("score", "0").replace("−", "-")) <= 0:
+                            # Skip posts with low karma
+                            continue
                         lines_written += write_entry(input_entry, writer)
 
             if input_parse_errors > 0:
@@ -207,6 +210,9 @@ def write_entry(input_entry: Mapping[str, Any], writer: jsonlines.Writer) -> int
     # Make a separate output entry for each top-level comment
     for comment_index, comment in enumerate(input_entry.get("comments", [])):
         try:
+            if int(comment.get("score", "0").replace("−", "-")) <= 0:
+                # Skip comments with low karma
+                continue
             entry_with_one_comment = dict(input_entry)
             entry_with_one_comment["comments"] = [comment]
             output_entry = {
