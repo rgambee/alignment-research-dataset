@@ -92,6 +92,8 @@ FIELD_FORMATTERS: Mapping[str, Union[str, Callable[[str], str]]] = {
     "comments": COMMENT_TEMPLATE,
     # Replace minus sign (Unicode code point U+2212) with plain ASCII hyphen (U+002D)
     "score": lambda s: s.replace("−", "-"),
+    # Replace instances of the separator within the text
+    "text": lambda s: s.replace("%%%", "---"),
 }
 
 
