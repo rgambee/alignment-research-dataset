@@ -51,33 +51,31 @@ PROMPT_TEMPLATE = """
 {title}
 
 by {authors}
-
-{tags}
+Tags: {tags}
+Votes: {votes}
+Karma: {score}
 
 {text}
 
-Comments
-
-===
+%%%
 
 """
 
 # Template for formatting the completion.
 # OpenAI recommends the completion start with a whitespace character and end
-# with a stop sequence (e.g. "###").
-COMPLETION_TEMPLATE = """
-{comments}
+# with a stop sequence (e.g. "\n\n###\n\n").
+COMPLETION_TEMPLATE = """ {comments}
 
-===
+%END%
 
 """
 
 # Template for formatting forum comments, like those from LessWrong.
-COMMENT_TEMPLATE = """
-{authors}
+COMMENT_TEMPLATE = """Comment by {authors}
+Votes: {votes}
+Karma: {score}
 
-{text}
-"""
+{text}"""
 
 
 # The FIELD_FORMATTERS dictionary defines custom formatters for specific fields in a
