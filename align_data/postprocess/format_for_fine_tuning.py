@@ -90,8 +90,6 @@ Karma: {score}
 FIELD_FORMATTERS: Mapping[str, Union[str, Callable[[str], str]]] = {
     # Format the comment field according to the template above
     "comments": COMMENT_TEMPLATE,
-    # Limit the text field to a length of 3000 characters (not tokens)
-    "text": lambda text: text[:3000],
 }
 
 
